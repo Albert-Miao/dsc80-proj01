@@ -148,7 +148,7 @@ def lateness_penalty(col):
     max_time = times.max()
     max_time = max(two_week_threshold + 1, max_time)
     return pd.cut(times, [on_time, late_threshold, one_week_threshold, two_week_threshold, max_time],
-                  labels=[1.0, 0.9, 0.7, 0.4], include_lowest=True)
+                  labels=[1.0, 0.9, 0.7, 0.4], include_lowest=True).astype('float')
 
 
 # ---------------------------------------------------------------------
@@ -174,7 +174,15 @@ def process_labs(grades):
     True
     """
 
-    return ...
+    late_str = ' - Lateness (H:M:S)'
+    max_str = ' - Max Points'
+    output = pd.DataFrame()
+
+    for lab in get_assignment_names(grades)['lab']:
+        output[lab] = grades[lab].div(grades[lab + max_str]).mul(lateness_penalty(grades[lab + late_str]))
+
+    output.set_index(grades.index)
+    return output
 
 
 # ---------------------------------------------------------------------
@@ -196,7 +204,9 @@ def lab_total(processed):
     True
     """
 
-    return ...
+    processed = processed.fillna(0)
+
+    return (processed.sum(axis=1) - processed.min(axis=1)) / (len(processed.columns) - 1)
 
 
 # ---------------------------------------------------------------------
@@ -219,7 +229,23 @@ def total_points(grades):
     True
     """
 
-    return ...
+    grades = grades.fillna(0)
+
+    output = pd.DataFrame()
+
+    output['project'] = projects_total(grades)
+    output['lab'] = lab_total(process_labs(grades))
+
+    assignment_names = get_assignment_names(grades)
+    normal_assignments = ['disc', 'final', 'midterm', 'checkpoint']
+
+    for key in normal_assignments:
+        score_str = assignment_names[key]
+        max_str = [s + ' - Max Points' for s in score_str]
+        output[key] = grades[score_str].sum(axis=1) / grades[max_str].sum(axis=1)
+
+    return (output['project'] * 0.3) + (output['lab'] * 0.2) + (output['disc'] * 0.025) + \
+           (output['checkpoint'] * 0.025) + (output['midterm'] * 0.15) + (output['final'] * 0.3)
 
 
 def final_grades(total):
@@ -234,7 +260,10 @@ def final_grades(total):
     True
     """
 
-    return ...
+    return pd.cut(total, [0, 0.6, 0.7, 0.8, 0.9, 1], labels=['F', 'D', 'C', 'B', 'A'], right=False,
+                  include_lowest=True)
+
+
 
 
 def letter_proportions(grades):
@@ -253,7 +282,7 @@ def letter_proportions(grades):
     True
     """
 
-    return ...
+    return final_grades(total_points(grades)).value_counts(normalize=True)
 
 
 # ---------------------------------------------------------------------
@@ -276,7 +305,22 @@ def simulate_pval(grades, N):
     True
     """
 
-    return ...
+    sen_grades = grades[grades['Level'] == 'SR']
+    num_seniors = len(sen_grades)
+
+    grades = total_points(grades)
+    sen_grades = total_points(sen_grades)
+    sen_avg = sen_grades.mean()
+
+    avgs = []
+
+    for i in range(N):
+        sample = grades.sample(num_seniors, replace=False)
+        avg = sample.mean()
+        avgs.append(avg)
+
+
+    return sum(np.array(avgs) < sen_avg) / N
 
 
 # ---------------------------------------------------------------------
@@ -300,7 +344,45 @@ def total_points_with_noise(grades):
     True
     """
 
-    return ...
+    assignment_names = get_assignment_names(grades)
+    grades[assignment_names['lab']] = process_labs(grades)
+    grades[[s + ' - Max Points' for s in assignment_names['lab']]] = 1
+
+    assignments = []
+
+    for category in assignment_names.values():
+        for assignment in category:
+            assignments.append(assignment)
+    assignments_max = [s + ' - Max Points' for s in assignments]
+
+    assignments_df = grades[assignments]
+    shape = assignments_df.shape
+
+    noise = pd.DataFrame(np.random.normal(0, 0.02, size=shape), columns=assignments_max)
+    noise = noise.mul(grades[assignments_max])
+    noise.columns = assignments
+
+    grades[assignments] = grades[assignments] + noise
+
+    grades = grades.fillna(0)
+
+    output = pd.DataFrame()
+
+    output['project'] = projects_total(grades)
+    output['lab'] = lab_total(grades[assignment_names['lab']])
+
+    assignment_names = get_assignment_names(grades)
+    normal_assignments = ['disc', 'final', 'midterm', 'checkpoint']
+
+    for key in normal_assignments:
+        score_str = assignment_names[key]
+        max_str = [s + ' - Max Points' for s in score_str]
+        output[key] = grades[score_str].sum(axis=1) / grades[max_str].sum(axis=1)
+
+    output.clip(0, 1)
+
+    return (output['project'] * 0.3) + (output['lab'] * 0.2) + (output['disc'] * 0.025) + \
+           (output['checkpoint'] * 0.025) + (output['midterm'] * 0.15) + (output['final'] * 0.3)
 
 
 # ---------------------------------------------------------------------
@@ -329,7 +411,7 @@ def short_answer():
     True
     """
 
-    return ...
+    return [0, 77, [-0.013135787304147096, 0.01594857085957257], 61, [True, False]]
 
 
 # ---------------------------------------------------------------------
@@ -374,4 +456,5 @@ def check_for_graded_elements():
 
 
 test = pd.read_csv('data/grades.csv')
-print(last_minute_submissions(test))
+thing = total_points_with_noise(test)
+print(thing)
