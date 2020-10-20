@@ -411,7 +411,7 @@ def short_answer():
     True
     """
 
-    return [0, 77, [-0.013135787304147096, 0.01594857085957257], 61, [True, False]]
+    return [0, 77, [71, 105], 61/535, [True, False]]
 
 
 # ---------------------------------------------------------------------
@@ -454,7 +454,3 @@ def check_for_graded_elements():
 
     return True
 
-
-test = pd.read_csv('data/grades.csv')
-thing = total_points_with_noise(test)
-print(thing)
